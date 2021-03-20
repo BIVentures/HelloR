@@ -1,0 +1,67 @@
+ setwd("C:/DirectoryPathHere/")
+ churn_data_raw<-read.csv("C:/DirectoryPathHere/Telco-Customer-Churn.csv")
+ str(churn_data_raw)
+ glimpse(churn_data_raw)
+
+#prune data - remove extra columns 
+#split data into train and test
+
+#tidyverse pipe %%
+
+#Remove customer id column
+churn_data_tbl <- churn_data_raw %%
++ select(-customerID) %%
++ drop_na() %%
++ select(Churn, everything())
+
+glimpse(churn_data_tbl)
+
+# Split training $ test data
+set.seed(100)
+train_test_split <-
+initial_sokit(churn_data_tbl, prop=0.8)
+
+train_test_split
+
+#Retrieve Test and Training Data
+train_tbl<-training(train_test_split)
+test_tbl<-testing(train_test_split)
+
+
+#Test to see if the log transformation increases
+#the magnitute of the correlation
+#focus is similar to select takes the columns and focuses only the columns and rows of important
+#fashion() - Makes the formatting aesthetically easier to read
+
+train_tbl %%
+	select(Churn, TotalCharges) %%
+	mutate(
+					Churn=Churn %% as.factor() %%
+					as.numeric(),
+					LogTotalCharges=log(TotalCharges)
+					) %%
+	correlate() %%
+	focus(Churn) %%
+	fashion()
+
+
+ hist(train_tbl$SeniorCitizen, main="TELCO Senior Citizen Distribution", xlab="Senior Citizen", ylab="Number of Customer", col="grey")
+
+# create pipeline for data preprocessing 
+ rec_obj <- recipe(Churn ~., data=train_tbl) %%
++ step_discretize(tenure, options=list(cuts=6)) %%
++ step_log(TotalCharges) %%
++ step_dummy(all_nominal(), - 
++ all_outcomes()) %%
++ step_center(all_predictors(), -
++ all_outcomes()) %%
++ step_scale(all_predictors(), -
++ all_outcomes()) %%
++ prep(data=train_tbl)
+ rec_obj	
+
+#create training and testing dataset and glimpse the outcome
+ x_train_tbl <- bake(rec_obj, newdata=train_tbl)
+ x_test_tbl <- bake(rec_obj, newdata=test_tbl)
+ glimpse(x_train_tbl)
+
