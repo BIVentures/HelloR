@@ -1,0 +1,214 @@
+#Purpose:Customer Loan Data Analaytics
+#Author: BIVentures
+#Last Updated: February 4 2018
+
+#### Code Starts Here ####
+#set working directory
+setwd("C:/DirectoryPathHere/")
+#Load the libraries
+library(odbc)
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+#Establish DB Connection
+con <- DBI::dbConnect(odbc::odbc(), Driver = "SQL Server", Server = "ServerNameHere", 
+Database = "DatabaseNameHere", Trusted_Connection = "True", Port = 1433)
+
+query<-" SELECT product.product_name, account_type.account_type,loan_order.loan_amount, loan_order.customer_account_number, CONCAT(customer_account.customer_first_name,' ', customer_account.customer_last_name) AS customer_name,
+ customer_account.customer_dob, customer_account.customer_gender, customer_account.marital_status,loan_order.loan_number, LEFT( convert (varchar,[loan_start_date],126), 10) AS cleaned_loan_date, loan_order.account_type_code
+ FROM loan_order JOIN account_type ON loan_order.account_type_code = account_type.account_type_code
+ JOIN product ON account_type.product_code= product.product_code
+ JOIN customer_account ON customer_account.customer_account_number=loan_order.customer_account_number;"
+ 
+#execute the query
+ data<-dbGetQuery(con, query)
+
+#### write a csv file containing the results of the data
+filename<-paste("customer_loans", ".csv")
+filename
+write.csv(data, file = filename, header = TRUE, quote=FALSE, sep="\t")
+data<-read.csv(filename)
+
+##convert data into table format using tibble library
+data<-as_tibble(data)
+data
+#convert data into table data frame using dplyr
+ data<-tbl_df(data)
+#print data
+
+## calculate age function showing years
+calc_age<-function(birthDate, today=Sys.Date()){
+require(lubridate)
+period <- as.period(interval(birthDate, today), units="year")
+period$year
+}
+
+#dplyr mutate function to add new column with some sort of calculation
+#works with the above age function
+data<-mutate(data,
+age=calc_age(data$customer_dob, today))
+tbl_df(data$age)
+
+> tmp<-as.Date(data$cleaned_loan_date, "%Y-%m-%d")
+> as.numeric(format(tmp,'%Y'))
+
+
+
+
+#show the tabular form the data
+View(data)
+
+#dplyr filter function to filter records with the following
+dataMale<-filter(data, customer_gender=="M" & loan_amount==6000)
+head(dataMale)
+
+#dplyr filter function to filter records based on gender and loan amount
+dataMale<-filter(data, customer_gender=="M" | loan_amount>=2000)
+head(dataMale)
+summary(dataMale$loan_amount)
+
+
+#dplyr select function for selective column
+dataCor<-select(data, age, loan_amount, account_type_code, account_type)
+head(dataCor)
+#dplyr select function for selective column, remove column account_type
+head(select(dataCor, -account_type)) 
+
+
+dataC<-head(select(dataCor, -account_type))
+#print data 
+dataC
+
+#explore relationship among the selected features
+cor(data[c("age", "loan_amount", "account_type_code")])
+
+#visualize relationship among the selected features
+pairs(data[c("age", "loan_amount", "account_type_code")])
+
+library(psych)
+pairs.panels(data[c("age", "loan_amount", "account_type_code")])
+
+#show visual graph age vs gender
+#show different colors for the customer_gender variable
+ggplot(data, aes(x=customer_gender,y=age, color=customer_gender)) + geom_point(na.rm = FALSE, show.legend = TRUE)+labs(title = "Customer Age vs Gender")
+
+#show facet grid for the graph based on the age
+# If scales and space are free, then the mapping between position
+# and values in the data will be the same across all panels. This
+# is particularly useful for categorical axes
+dt <- ggplot(data, aes(x=customer_gender,y=age, color=customer_gender)) + geom_point(na.rm = FALSE, show.legend = TRUE)+labs(title = "Customer Age vs Gender")
+dt + facet_grid(. ~ age, scales="free")
+ 
+ 
+#show visual graph with fixed color red
+#show color transparency by using alpha=0.2
+ggplot(data, aes(x=customer_gender,y=age, color=gender)) + geom_point(na.rm = FALSE, show.legend = TRUE, color="red", alpha=0.2)+labs(title = "Customer Age vs Gender")
+
+dt <- ggplot(data, aes(x=customer_gender,y=age, color=customer_gender)) + geom_point(na.rm = FALSE, show.legend = TRUE)+labs(title = "Customer Age vs Gender")+facet_wrap(~ gender)
+
+#show facet wrap loan_amount vs customer_gender
+dt <- ggplot(data, aes(x=customer_gender,y=loan_amount, color=customer_gender)) + geom_point(na.rm = FALSE, show.legend = TRUE)+labs(title = "Customer Loan Amount vs Gender")+ facet_wrap(~ loan_amount)
+dt
+
+#summary of the customer loan amount
+summary(data$loan_amount)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+   3000   30000   80000   94308  100000  285000
+   
+#summary of the customer age even if it contains the missing values
+ summary(data$age)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  22.00   22.00   52.00   40.15   52.00   54.00  
+  
+#summary of the customer age, correcting and removing the missing values  
+ summary(data$age, na.rm=TRUE)
+ 
+ #plot summary using Histogram
+hist(data$age,prob=T,main="Customer Age", xlab="Customer Age")
+ points(density(data$age),type="l",col="blue")
+ rug(data$age,col="red")
+
+###If we want to fit a normal curve over the data, instead of the command density() 
+###we can use dnorm() and curve() like so:
+
+m<-mean(data$age);std<-sqrt(var(data$age))
+hist(data$age,prob=T,main="Customer Age", xlab="Customer Age")
+curve(dnorm(x, mean=m, sd=std), col="darkblue", lwd=2, add=TRUE)
+
+
+ 
+
+###two or more plots histogram in the same window
+###par(mfrow=c(#rows,#columns))
+par(mfrow=c(2,2))
+hist(data$age, prob=T, main="Customer Age", xlab="Customer Age")
+hist(data$loan_amount, prob=T, main="Loan Amount", xlab="Loan ($)")
+
+dataMale<-filter(data, customer_gender=="M") 
+dataFemale<-filter(data, customer_gender=="F")
+##hist(dataMale, prob=T, main="Male Customer", xlab="Male")
+###hist(dataFemale, prob=T, main="Female Customer", xlab="Female")
+
+  #reduce each group to a smaller summary with a specific function
+summarize(data, mean(loan_amount))  
+  
+# bar plot for the customer loan amount and the account type
+boxplot(data$loan_amount, names.arg =data$account_type, main="Loan Account Types", xlab="Account_type", ylab="Total Amount ($)", border="blue", col="red")
+barplot(data$loan_amount, names.arg =data$account_type, main="Loan Account Types", xlab="Account_type", ylab="Total Amount ($)", border="blue", col="red")
+
+
+#how to load file into CSV format
+write.csv(x, file = "", append = FALSE, quote = FALSE, sep = " ",
+            eol = "\n", na = "NA", dec = ".", row.names = TRUE,
+            col.names = TRUE,
+            fileEncoding = "")
+write.table(data, file = "foo1.txt", sep="\t", col.names = TRUE, row.names=FALSE)
+
+###checking data columns for NA values
+> na.test <-  function (x) {
++     w <- sapply(x, function(x)all(is.na(x)))
++     if (any(w)) {
++         stop(paste("All NA in columns", paste(which(w), collapse=", ")))
++     }
++ }
+> sapply(data, function(x)all(is.na(x)))
+
+## Transforming data type values
+data$marital_status [data$marital_status == "TRUE"] <- 1
+data$marital_status [data$marital_status == "FALSE"] <- 0
+data$marital_status <- as.integer(data$marital_status )
+View(data)
+
+# Linear Model with summary
+#simple linear model
+linearAgeLoanModel<-lm(age~loan_amount, data=data)
+linearAgeLoanModel
+
+plot(age ~ loan_amount, data = data)
+abline(linearAgeLoanModel)
+
+p<- ggplot(data, aes(x = age, y = loan_amount)) + 
++     geom_point()  +
++     stat_smooth(method = "lm", col = "red")
+
+p+ scale_y_continuous(labels = comma)
+####OR p+ scale_x_continuous(labels = percent)
+
+###playing with the display
+p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+##how much loan_amount  per account_type
+ggplot(data, aes(x=account_type, y=loan_amount)) + stat_summary(fun.y="sum", geom="point")+ scale_y_continuous(labels = comma)+ stat_smooth(method = "lm", col = "blue")
+
+#gather more information about the linear model
+summary(linearAgeLoanModel)
+
+
+###pipeline operations
+> data %>%
+     select(age, marital_status, loan_amount)%>%
+     filter(loan_amount > 2000)
+
+#### Code Ends Here ####
